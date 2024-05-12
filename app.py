@@ -54,8 +54,6 @@ from holo.logger import Logger
 # option 1: generate for the current selected interval (one column per day, even partial)
 # option 2: compute the average across the days of the timeFrame (with a heatmap)
 
-# TODO: a comand to export all the periodes of a specific activity on a new datas
-# BUG: when exporting it seems to be the wrong file selector compared to normal save as file
 
 #~# only update the stats when they are visible + use a scrollbar for the stats
 #~# -> property visible on statLine \w getter/setter, not visible -> don't update the stat
@@ -1467,10 +1465,10 @@ class ExportDialog(CustomTopLevel):
         # create the widgets
         self.checkActivitiesFrame = ActivitiesCheckableFrame(self, self.application)
         self.intervalStartEntry = TextEntryLine(
-            self, self.application, "start of the export interval: ", 
+            self, self.application, "start of the export interval (or 'all'): ", 
             defaultEntryText=datetimeToText(currentSelectedInterval.startTime))
         self.intervalEndEntry = TextEntryLine(
-            self, self.application, "end of the export interval: ", 
+            self, self.application, "end of the export interval (or 'all'): ", 
             defaultEntryText=datetimeToText(currentSelectedInterval.endTime))
         del currentSelectedInterval
         self.exportButton = tkinter.Button(self, text="export to file", command=self.export)
@@ -1492,9 +1490,13 @@ class ExportDialog(CustomTopLevel):
         self.application.safeSaveToFile(datas=exportDatas, filePath=filePath)
     
     def getSelectedTimeInterval(self)->"_TimeID":
+        startIntervalText: str = self.intervalStartEntry.getEntryText().strip()
+        endIntervalText: str = self.intervalEndEntry.getEntryText().strip()
         return _TimeID(
-            startTime=datetimeFromText(self.intervalStartEntry.getEntryText()),
-            endTime=datetimeFromText(self.intervalEndEntry.getEntryText()))
+            startTime=(datetime.min if startIntervalText == "all" 
+                       else datetimeFromText(startIntervalText)),
+            endTime=(datetime.max if endIntervalText == "all"
+                       else datetimeFromText(endIntervalText)))
 
     def updatedDatas(self, targets:"set[_UpdatedTarget]")->None:
         self.checkActivitiesFrame.updatedDatas(targets)
