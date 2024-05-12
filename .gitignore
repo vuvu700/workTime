@@ -1,0 +1,10 @@
+# generic exclusions
+**/__pycache__
+**/*.pyc
+.vscode
+datas
+
+# specific exclusions
+assets/fullSizeIcon.png
+currentSessionLogs.log
+testTKBindigs.py

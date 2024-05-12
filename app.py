@@ -26,7 +26,7 @@ from model import (
     prettyTimeFrame, timeFrameToText, timeFrameFromText,
 )
 from projectPaths import (
-    DATAS_DIRECTORY, DATAS_LAST, ICON_PATH, LOGGS_FILE_PATH,
+    DATAS_DIRECTORY, ICON_PATH, LOGGS_FILE_PATH,
 )
 
 from holo.protocols import SupportsContext, Protocol, SupportsRichComparison
