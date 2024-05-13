@@ -1677,7 +1677,11 @@ class FontsManger():
         newFont.configure(size=int(newSize*font.cget("size")))
         return newFont
 
+class Args(TypedDict):
+        openDatasPath: "str|None"
+
 def main(progFile:str)->None:
+    # logger works automaticaly, nothing to do :)
     logger: Logger = Logger(
         LOGGS_FILE_PATH, fileOpenMode="w",
         newLogLineAfter=timedelta(milliseconds=50))
@@ -1687,9 +1691,6 @@ def main(progFile:str)->None:
         # it allow windows to use the correct icon
         ctypes.windll.shell32.\
             SetCurrentProcessExplicitAppUserModelID("holo.workTime.application")
-    
-    class Args(TypedDict):
-        openDatasPath: "str|None"
     
     argumentParser = argparse.ArgumentParser(prog=progFile)
     argumentParser.add_argument("--open", action="store", dest="openDatasPath", default=None,
