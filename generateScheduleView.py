@@ -7,8 +7,9 @@ from holo.__typing import (
 )
 
 from model import (
-    FullDatas, PeriodesStorage, _TimeID, Periode, _DayID, _MonthID,
-    prettyTimedelta, prettyDatetime,
+    PeriodesStorage, Periode, 
+    _TimeID, _DayID, _WeekID, _MonthID,
+    prettyDatetime,
 )
 
 class GridPos(NamedTuple):
@@ -46,40 +47,57 @@ class DrawingRect(NamedTuple):
 
 
 def __computeGridSizeAndDaysToGrid(timeFrame:"_TimeID")->GridInfos:
-    days: "dict[_DayID, _TimeID]" = \
-        {_DayID.fromDatetime(interval.startTime): _TimeID.fromDuration(p.startTime, p.duration)
-         for interval, p in timeFrame.splitPer_TimeFrame("day").items()}
-    months: "dict[_MonthID, _TimeID]" = \
-        {_MonthID.fromDatetime(interval.startTime): _TimeID.fromDuration(p.startTime, p.duration)
-         for interval, p in timeFrame.splitPer_TimeFrame("month").items()}
-    sortedDays = sorted(days.keys(), key=lambda day:day.startTime)
-    NB_DAYS = len(days)
+    sortedDays = sorted(
+        (_DayID.fromDatetime(interval.startTime)
+         for interval in timeFrame.splitPer_TimeFrame("day").keys()),
+        key=lambda day:day.startTime)
+    weeks: "list[_TimeID]" = \
+        [_TimeID.fromDuration(subPeriode.startTime, subPeriode.duration)
+         for subPeriode in timeFrame.splitPer_TimeFrame("week").values()]
+    months: "list[_TimeID]" = \
+        [_TimeID.fromDuration(subPeriode.startTime, subPeriode.duration)
+         for subPeriode in timeFrame.splitPer_TimeFrame("month").values()]
+    NB_DAYS = len(sortedDays)
+    NB_WEEKS = len(weeks)
     NB_MONTHS =  len(months)
-    print(f"acrros: {NB_DAYS} days and {NB_MONTHS} months, of duration: {prettyTimedelta(timeFrame.duration, useDays=True)}")
 
     # determine visual mode and the number of cols/rows
 
     dayToGrid: "dict[_DayID, GridPos]"
     assert NB_MONTHS != 0
-    if NB_MONTHS == 1:
-        # week or months mode
-        NB_COLS = (NB_DAYS if timeFrame.duration <= timedelta(days=7) else 7)
-        NB_ROWS = ceil(NB_DAYS / NB_COLS)
+    if timeFrame.duration <= timedelta(days=7):
+        NB_COLS = NB_DAYS
+        NB_ROWS = 1
         dayToGrid = {day: GridPos(*divmod(index, NB_COLS))
                      for index, day in enumerate(sortedDays)}
-    else: # => many months
+    elif NB_MONTHS == 1:
+        # week or months mode
+        NB_COLS = 7
+        NB_ROWS = NB_WEEKS
+        dayToGrid = {}
+        for indexWeek, interval in enumerate(weeks):
+            daysOfWeekInterval = sorted(interval.splitPer_TimeFrame("day").keys(),
+                                key=lambda day:day.startTime)
+            for day in daysOfWeekInterval:
+                weekDay: int = day.startTime.isocalendar()[2]
+                day = _DayID.fromDatetime(day.startTime)
+                dayToGrid[day] = GridPos(row=indexWeek, col=weekDay-1)
+                del day, weekDay
+            del interval, indexWeek, daysOfWeekInterval
+        print()
+    else: # => accros multiple months
         NB_ROWS = NB_MONTHS
         NB_COLS = 0
         dayToGrid = {}
-        for indexMonth, interval in enumerate(months.values()):
-            daysOfMonth = sorted(interval.splitPer_TimeFrame("day").keys(),
+        for indexMonth, interval in enumerate(months):
+            daysOfWeekInterval = sorted(interval.splitPer_TimeFrame("day").keys(),
                                 key=lambda day:day.startTime)
-            NB_COLS = max(NB_COLS, len(daysOfMonth))
-            for indexDay, day in enumerate(daysOfMonth):
+            NB_COLS = max(NB_COLS, len(daysOfWeekInterval))
+            for indexDay, day in enumerate(daysOfWeekInterval):
                 day = _DayID.fromDatetime(day.startTime)
                 dayToGrid[day] = GridPos(row=indexMonth, col=indexDay)
                 del day, indexDay
-            del interval, indexMonth, daysOfMonth
+            del interval, indexMonth, daysOfWeekInterval
     
     return GridInfos(nbCols=NB_COLS, nbRows=NB_ROWS, daysToGrid=dayToGrid, days=sortedDays)
 

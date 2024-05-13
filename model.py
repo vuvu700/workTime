@@ -21,8 +21,7 @@ from holo.linkedObjects import SkipList, NodeAuto
 
 from utils import (
     TrustError, Jsonable,
-    _PeriodeColumn_TO_PeriodeField, _PeriodeColumn, _PeriodeFields_sortable,
-    _UpdatedTarget, _UpdatedALLTarget, _SaveResponse, _ActivityColumn,
+    _UpdatedTarget, _PeriodeFields_sortable,
     JSON_SEMI_COMPACT_ARGS, _TimeFrame, _TimeFrame_literals, _SubActionType,
     _T_TimeID, _ConfigField, _PeriodeField, _CommentsMerge,
     datetimeFromText, datetimeToText, prettyDatetime, prettyTimedelta, 
@@ -262,7 +261,10 @@ class FullDatas(PartialyFinalClass, PrettyfyClass, Jsonable):
         """return all the registered activities and the number of periodes that use them"""
         return {activity: self.__allPeriodes.getActivitiesUsageCount(activity)
                 for activity in self.__registeredActivities}
-        
+    
+    def getAllPeriodesInterval(self)->"_TimeID|None":
+        """return the precise interval that holds all the periodes, or None if it has no periodes"""
+        return self.__allPeriodes.getAllPeriodesInterval()
     
     ### selected time
     
@@ -712,6 +714,17 @@ class PeriodesStorage(PartialyFinalClass, Generic[_T_TimeID], PrettyfyClass):
         return sorted(
             self.__periodes, key=lambda periode: getattr(periode, field),
             reverse=(not ascendingOrder))
+    
+    def getAllPeriodesInterval(self)->"_TimeID|_T_TimeID":
+        """return the precise interval that holds all the periodes\n
+        if it has no periodes, return its timeframe"""
+        if len(self.__periodes) == 0:
+            return self.timeframe
+        return _TimeID(
+            startTime=self.__periodes.getFirst().startTime,
+            endTime=self.__periodes.getLast().endTime)
+        
+        
     
     def __iter__(self)->"Iterator[Periode]": 
         return iter(self.__periodes)

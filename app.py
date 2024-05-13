@@ -18,15 +18,18 @@ import tkinter.messagebox
 from tkinter.font import Font
 
 from model import (
-    _PeriodeColumn, _PeriodeColumn_TO_PeriodeField, _ConfigField, 
-    _PeriodeField, _UpdatedTarget, _UpdatedALLTarget, _TimeFrame,
-    _TimeFrame_literals, _SaveResponse, _ActivityColumn,
+    _ConfigField, _PeriodeField, _UpdatedTarget, _TimeFrame, _TimeFrame_literals, 
     FullDatas, Periode, TimeTarget, _TimeID, PeriodesStorage, Activity, NoHistoryError,
     prettyTimedelta, datetimeToText, datetimeFromText, prettyDatetime, timedeltaFromText,
     prettyTimeFrame, timeFrameToText, timeFrameFromText,
 )
+from utils import (
+    _PeriodeColumn, _PeriodeColumn_TO_PeriodeField,
+    _UpdatedALLTarget, _SaveResponse, _ActivityColumn,
+)
+from generateScheduleView import drawSchedule
 from projectPaths import (
-    DATAS_DIRECTORY, ICON_PATH, LOGGS_FILE_PATH,
+    DATAS_DIRECTORY, ICON_PATH, LOGGS_FILE_PATH, SCHEDULES_DIRECTORY,
 )
 
 from holo.protocols import SupportsContext, Protocol, SupportsRichComparison
@@ -72,9 +75,22 @@ from holo.logger import Logger
 #   - <activity1>: ... 
 #   - <activity2>: ... etc
 
-FILE_TYPES: "list[tuple[str, str]]" = [("JSON", ".json"), ]
-"""the file types that are accepted to be opened: [(name, .extention), ...]"""
+DATAS_FILE_TYPES: "list[tuple[str, str]]" = [("JSON", ".json"), ]
+"""the file types that are accepted for the datas: [(name, .extention), ...]"""
+SCHEDULE_FILE_TYPES: "list[tuple[str, str]]" = [
+    ("SVG", ".svg"), ("HTML", ".html")]
 
+
+# can't be moved to utils :(
+def getSelectedTimeInterval(startIntervalText:str, endIntervalText:str, datas:"FullDatas")->"_TimeID":
+    allPeriodesInterval = datas.getAllPeriodesInterval()
+    if allPeriodesInterval is None:
+        allPeriodesInterval = datas.get_TimeID(None, None)
+    return _TimeID(
+        startTime=(allPeriodesInterval.startTime if startIntervalText == "all" 
+                    else datetimeFromText(startIntervalText)),
+        endTime=(allPeriodesInterval.endTime if endIntervalText == "all"
+                    else datetimeFromText(endIntervalText)))
 
 class App():
     datas: FullDatas
@@ -104,13 +120,22 @@ class App():
         self.tkinterRoot.destroy()
         del self.tkinterRoot, self.datas
     
-    def askFilenameToSave(self, master:"tkinter.Misc")->"Path|None":
+    def askFilenameToSaveGeneric(
+            self, master:"tkinter.Misc", title:str,
+            directory:"Path|None", fileExtentions:"list[tuple[str, str]]")->"Path|None":
         fileName = tkinter.filedialog.asksaveasfilename(
-            defaultextension=".json", initialdir=DATAS_DIRECTORY, 
-            parent=master, filetypes=FILE_TYPES, title="select file to save the datas")
+            initialdir=directory, parent=master, 
+            defaultextension=(None if len(fileExtentions) == 0 
+                              else fileExtentions[0][1]),
+            filetypes=fileExtentions, title=title)
         if fileName == "":
             return None
         return Path(fileName)
+    
+    def askFilenameToSaveDatas(self, master:"tkinter.Misc")->"Path|None":
+        return self.askFilenameToSaveGeneric(
+            master=master, title="select file to save the datas",
+            directory=DATAS_DIRECTORY, fileExtentions=DATAS_FILE_TYPES)
     
     def askToSave(self)->"_SaveResponse":
         """ask the app tho save the datas if needed"""
@@ -328,12 +353,13 @@ class MainFrame(tkinter.Tk):
 
 class MenusWidget(tkinter.Menu):
     def __init__(self, mainFrame:MainFrame) -> None:
-        super().__init__(mainFrame, bg="blue")
+        super().__init__(mainFrame)
         self.mainFrame: MainFrame = mainFrame
         self.application: App = mainFrame.application
         self.editConfigDialog:"None|EditConfigDialog" = None
         self.activitiesManager:"None|ActivitiesManager" = None
         self.exportDialog:"None|ExportDialog" = None
+        self.scheduleDialog:"None|ScheduleDialog" = None
         
         # fileSubMenu
         self.fileSubMenu = tkinter.Menu(self)
@@ -357,6 +383,7 @@ class MenusWidget(tkinter.Menu):
         # ExportSubMenu
         self.ExportSubMenu = tkinter.Menu(self)
         self.ExportSubMenu.add_command(label="Export periodes", command=self.openExportMenu, accelerator="Ctrl+E")
+        self.ExportSubMenu.add_command(label="generate schedule", command=self.openScheduleMenu, accelerator="Ctrl+G")
         self.add_cascade(menu=self.ExportSubMenu, label="Export")
         
         # fileSubMenu
@@ -370,6 +397,7 @@ class MenusWidget(tkinter.Menu):
         self.mainFrame.bind("<Control-y>", func=lambda e: self.application.redo())
         # exportSubMenu
         self.mainFrame.bind("<Control-e>", func=lambda e: self.openExportMenu())
+        self.mainFrame.bind("<Control-g>", func=lambda e: self.openScheduleMenu())
     
     def newDatas(self) -> None:
         # create a new empty datas and update the datas to the app
@@ -380,7 +408,7 @@ class MenusWidget(tkinter.Menu):
         # ask a file to open
         file = tkinter.filedialog.askopenfile(
             mode="rb", defaultextension=".pickle", initialdir=DATAS_DIRECTORY, 
-            parent=self, filetypes=FILE_TYPES, title="select the datas file to open")
+            parent=self, filetypes=DATAS_FILE_TYPES, title="select the datas file to open")
         if file is None: # => no file selected, don't open anything
             return None
         assert isinstance(file, BufferedReader)
@@ -423,7 +451,7 @@ class MenusWidget(tkinter.Menu):
     def saveAsToFile(self)->bool:
         """ask a file to save the datas and return whether the datas was saved"""
         # ask a file for saving 
-        filePath: "Path|None" = self.application.askFilenameToSave(master=self)
+        filePath: "Path|None" = self.application.askFilenameToSaveDatas(master=self)
         print("[DEBUG] save filename:", filePath)
         if filePath is None: # => no file selected, don't save anything
             return False
@@ -457,6 +485,15 @@ class MenusWidget(tkinter.Menu):
             self.exportDialog.focus()
         else: # => not opened => open a new one
             self.exportDialog = ExportDialog(self)
+
+    def openScheduleMenu(self)->None:
+        if self.scheduleDialog is not None:
+            tkinter.messagebox.showinfo(
+                title="schedule generator alredy opened", 
+                message="the schedule generator menu is alredy opened")
+            self.scheduleDialog.focus()
+        else: # => not opened => open a new one
+            self.scheduleDialog = ScheduleDialog(self)
 
     def updatedDatas(self, targets:"set[_UpdatedTarget]")->None:
         if self.activitiesManager is not None:
@@ -924,7 +961,7 @@ class ActionsFrame(tkinter.Frame):
 class CustomTopLevel(tkinter.Toplevel):
     def __init__(self, master:tkinter.Misc, application:App, title:str,
                  resizeable:bool=False, posDelta:"tuple[int, int]"=(100, 100))->None:
-        super().__init__(master=master)
+        super().__init__(master=master, bg="lightskyblue")
         self.title(title)
         self.application: App = application
         self.resizable(resizeable, resizeable)
@@ -1084,7 +1121,7 @@ class TimeFrameSelectorLine(ComboboxLine):
             defaultValue=timeFrameToText(self.getDefaultTimeFrame()))
         self.__selectFunction: "Callable[[_TimeFrame], None]" = selectFunction
         self.selectButton = tkinter.Button(
-            self, text="select", bg="cyan", command=self.selectTimeFrame)
+            self, text="select", bg="maroon1", command=self.selectTimeFrame)
         self.selectButton.grid(column=2, row=0, sticky="e")
         self.updatedDatas(self.UPDATE_CONDITIONS)
     
@@ -1183,9 +1220,12 @@ class EditPeriodeDialog(PeriodeDialog):
         super().__init__(master, application, periode)
         self.splitPeriodeDialog: "SplitPeriodeDialog|None" = None
         
-        self.removeButton = tkinter.Button(self, text="remove this periode", bg="lightsalmon1", command=self.removePeriode)
-        self.splitButton = tkinter.Button(self, text="split the periode", bg="lightsalmon1", command=self.splitPeriode)
-        self.validateButton = tkinter.Button(self, text="validate changes", bg="maroon1", command=self.savePeriode)
+        self.removeButton = tkinter.Button(
+            self, text="remove this periode", bg="lightsalmon1", command=self.removePeriode)
+        self.splitButton = tkinter.Button(
+            self, text="split the periode", bg="lightsalmon1", command=self.splitPeriode)
+        self.validateButton = tkinter.Button(
+            self, text="validate changes", bg="maroon1", command=self.savePeriode)
         self.removeButton.grid(column=0, row=self.nbEntrys, sticky="we")
         self.splitButton.grid(column=0, row=self.nbEntrys+1, sticky="we")
         self.validateButton.grid(column=0, row=self.nbEntrys+2, sticky="we")
@@ -1238,7 +1278,8 @@ class RemovePeriodeDialog(PeriodeDialog):
     
     def __init__(self, master: tkinter.Misc, application: App, periode: Periode) -> None:
         super().__init__(master, application, periode)
-        self.removeButton = tkinter.Button(self, text="remove periode", bg="maroon1", command=self.removePeriode)
+        self.removeButton = tkinter.Button(
+            self, text="remove periode", bg="maroon1", command=self.removePeriode)
         self.removeButton.grid(column=0, row=self.nbEntrys+1, sticky="we")
     
     def removePeriode(self)->None:
@@ -1259,7 +1300,8 @@ class SplitPeriodeDialog(CustomTopLevel):
             self, self.application, fixedText="when to split: ", defaultEntryText=datetimeToText(self.periode.midle))
         self.splitDurationEntryLine: TextEntryLine = TextEntryLine(
             self, self.application, fixedText="duration to remove: ", defaultEntryText="1min")
-        self.splitButton = tkinter.Button(self, text="split periode", bg="maroon1", command=self.splitPeiode)
+        self.splitButton = tkinter.Button(
+            self, text="split periode", bg="maroon1", command=self.splitPeiode)
         
         # place each entry line
         self.grid_columnconfigure(0, weight=1)
@@ -1356,9 +1398,9 @@ class ActivitiesManager(CustomTopLevel):
         self.commandsLine.addWidgets([
             self.activitySelector,
             tkinter.Button(self.commandsLine, text="register a new activity", 
-                           command=self.registerNewActivity, font=btnFont),
+                           command=self.registerNewActivity, font=btnFont, bg="green2"),
             tkinter.Button(self.commandsLine, text="remove the selected activity",
-                           command=self.removeSelectedActivity, font=btnFont)])
+                           command=self.removeSelectedActivity, font=btnFont, bg="darkorange1")])
         
         
         # makes the tabl take the maximum space available
@@ -1413,11 +1455,12 @@ class ActivitiesCheckableFrame(tkinter.Frame):
     UPDATE_CONDITIONS: "set[_UpdatedTarget]" = {"activity", }
     
     def __init__(self, master:tkinter.Misc, application:App)->None:
-        super().__init__(master=master)
+        super().__init__(master=master, bg=master["background"])
         self.application: App = application
         
-        self.textLabel = tkinter.Label(self, text="select the activities: ")
-        self.buttonsFrame = tkinter.Frame(self)
+        self.textLabel = tkinter.Label(
+            self, text="select the activities: ", bg=self["background"])
+        self.buttonsFrame = tkinter.Frame(self, bg=self["background"])
         self.textLabel.pack(fill="x", anchor="center", side="top")
         self.buttonsFrame.pack(fill="both", anchor="center", side="top")
         
@@ -1431,23 +1474,36 @@ class ActivitiesCheckableFrame(tkinter.Frame):
     
     def __generateActivitiesCheckBoxes(self, activities:"list[Activity]")->None:
         """generate the buttons of the activities (keep their state)"""
+        NB_ROWS: int = int(len(activities) ** 0.5)
         selectedActivies: "set[Activity]" = self.getSelectedActivities()
+        currentActivities: "set[Activity]" = set(self.activitiesValues.keys())
+        activitiesToRemove: "set[Activity]" = currentActivities.difference(activities)
+        """all activity in `currentActivities` but not in `activities`"""
         # clear the current activities items
-        self.activitiesCheckBoxes.clear()
-        self.activitiesValues.clear()
+        for activity in activitiesToRemove:
+            button = self.activitiesCheckBoxes.pop(activity)
+            self.activitiesValues.pop(activity)
+            button.destroy()
+            del activity, button
         # add the new activities
         for index, activity in enumerate(activities):
             # create the tkinter elements
-            var = tkinter.BooleanVar(value=(activity in selectedActivies))
-            button = tkinter.Checkbutton(
-                self.buttonsFrame, text=str(activity), variable=var, onvalue=True, offvalue=False)
-            # bind them to the structure
-            self.activitiesValues[activity] = var
-            self.activitiesCheckBoxes[activity] = button
+            if activity not in self.activitiesValues:
+                var = tkinter.BooleanVar(value=(activity in selectedActivies))
+                button = tkinter.Checkbutton(
+                    self.buttonsFrame, text=str(activity), 
+                    bg=self.buttonsFrame["background"],
+                    variable=var, onvalue=True, offvalue=False)
+                # bind them to the structure
+                self.activitiesValues[activity] = var
+                self.activitiesCheckBoxes[activity] = button
+                del button, var
             # place the button
-            NB_ROWS: int = int(len(activities) ** 0.5)
             column, row = divmod(index, NB_ROWS)
-            button.grid(row=row, column=column, sticky="nw")
+            self.activitiesCheckBoxes[activity].grid(
+                row=row, column=column, sticky="nw")
+            del activity, row, column
+            
 
     def updatedDatas(self, targets:"set[_UpdatedTarget]")->None:
         if self.UPDATE_CONDITIONS.isdisjoint(targets):
@@ -1471,7 +1527,8 @@ class ExportDialog(CustomTopLevel):
             self, self.application, "end of the export interval (or 'all'): ", 
             defaultEntryText=datetimeToText(currentSelectedInterval.endTime))
         del currentSelectedInterval
-        self.exportButton = tkinter.Button(self, text="export to file", command=self.export)
+        self.exportButton = tkinter.Button(
+            self, text="export to file", command=self.export, bg="maroon1")
         
         # place the widgets
         self.checkActivitiesFrame.grid(column=0, row=0)
@@ -1480,8 +1537,11 @@ class ExportDialog(CustomTopLevel):
         self.exportButton.grid(column=0, row=3)
     
     def export(self)->None:
-        filePath: "Path|None" = self.application.askFilenameToSave(master=self)
-        if filePath is None: # => no file selected, don't save anything
+        filePath: "Path|None" = self.application.askFilenameToSaveDatas(master=self)
+        if filePath is None: # => no file selected
+            tkinter.messagebox.showerror(
+                title="operation canceled", 
+                message="no file selected, can't export the datas")
             return None
         exportDatas = self.application.datas.exportPeriodes(
             selectedInterval=self.getSelectedTimeInterval(), 
@@ -1490,13 +1550,10 @@ class ExportDialog(CustomTopLevel):
         self.application.safeSaveToFile(datas=exportDatas, filePath=filePath)
     
     def getSelectedTimeInterval(self)->"_TimeID":
-        startIntervalText: str = self.intervalStartEntry.getEntryText().strip()
-        endIntervalText: str = self.intervalEndEntry.getEntryText().strip()
-        return _TimeID(
-            startTime=(datetime.min if startIntervalText == "all" 
-                       else datetimeFromText(startIntervalText)),
-            endTime=(datetime.max if endIntervalText == "all"
-                       else datetimeFromText(endIntervalText)))
+        return getSelectedTimeInterval(
+            startIntervalText=self.intervalStartEntry.getEntryText().strip(),
+            endIntervalText=self.intervalEndEntry.getEntryText().strip(),
+            datas=self.application.datas)
 
     def updatedDatas(self, targets:"set[_UpdatedTarget]")->None:
         self.checkActivitiesFrame.updatedDatas(targets)
@@ -1505,6 +1562,85 @@ class ExportDialog(CustomTopLevel):
     def destroy(self) -> None:
         self.menusWidget.exportDialog = None
         super().destroy()
+
+
+
+class ScheduleDialog(CustomTopLevel):
+    def __init__(self, menusWidget:MenusWidget) -> None:
+        super().__init__(menusWidget, menusWidget.application, "schedule generator window")
+        self.menusWidget: "MenusWidget" = menusWidget
+
+        currentSelectedInterval: "_TimeID" = self.application.datas.get_TimeID(None, None).asTimeID()
+        # create the widgets
+        self.expainationText = tkinter.Label(
+            self, padx=5, pady=15, bg=self["background"], justify="left",
+            text=("genrate an svg schedule of all the periodes inside the selected interval\n"
+                  + "unfortunately no perview can be generated\n"
+                  + "the different types of schedules are:\n"
+                  + " - interval duration <= 7 day: line schedule\n"
+                  + " - sub periode of a month: 1 line per week\n"
+                  + " - across multiple months: 1 line per month\n\n"
+                  + "tips: you can export the datas to create a copy\n"
+                  + "  in order to select precisely the periodes you whant"))
+        self.intervalStartEntry = TextEntryLine(
+            self, self.application, "start of the schedule interval (or 'all'): ", 
+            defaultEntryText=datetimeToText(currentSelectedInterval.startTime))
+        self.intervalEndEntry = TextEntryLine(
+            self, self.application, "end of the schedule interval (or 'all'): ", 
+            defaultEntryText=datetimeToText(currentSelectedInterval.endTime))
+        del currentSelectedInterval
+        self.generateButton = tkinter.Button(
+            self, text="generate to file", command=self.generate, bg="maroon1")
+        
+        # place the widgets
+        self.grid_columnconfigure(0, weight=1)
+        self.expainationText.grid(column=0, row=0)
+        self.intervalStartEntry.grid(column=0, row=1, sticky="we")
+        self.intervalEndEntry.grid(column=0, row=2, sticky="we")
+        self.generateButton.grid(column=0, row=3, sticky="we")
+    
+    def generate(self)->None:
+        # ask a file to save
+        saveFilePath: "Path|None" = self.application.askFilenameToSaveGeneric(
+            master=self, title="file to save the schedule",
+            directory=SCHEDULES_DIRECTORY, fileExtentions=SCHEDULE_FILE_TYPES)
+        if saveFilePath is None: # => no file selected, don't save anything
+            tkinter.messagebox.showerror(
+                title="operation canceled",
+                message="no file selected, can't generate the schedule")
+            return None
+        # get the interval, the periodes and generate the schedule
+        selectedInterval: "_TimeID" = self.getSelectedTimeInterval()
+        periodes = self.application.datas.getPeriodes(selectedInterval.startTime, selectedInterval)
+        svgDrawing = drawSchedule(periodes)
+        # set the lasts parameters
+        svgDrawing.set_pixel_scale(1080)
+        svgDrawing.append_title(self.application.datas.getConfigText("name"))
+        
+        # save to the file
+        with open(saveFilePath, mode="w") as saveFile:
+            if saveFilePath.suffix == ".html":
+                svgDrawing.as_html(output_file=saveFile)
+            else: # => expect an svg (or other)
+                svgDrawing.as_svg(output_file=saveFile)
+        tkinter.messagebox.showinfo(
+            title="sucessfull operation", message="the schedule is generated and saved")
+        
+    
+    def getSelectedTimeInterval(self)->"_TimeID":
+        return getSelectedTimeInterval(
+            startIntervalText=self.intervalStartEntry.getEntryText().strip(),
+            endIntervalText=self.intervalEndEntry.getEntryText().strip(),
+            datas=self.application.datas)
+
+    @override
+    def destroy(self) -> None:
+        self.menusWidget.scheduleDialog = None
+        super().destroy()
+
+
+
+
 
 class ErrorHandlerWithMessage(SupportsContext):
     def __init__(self, title:str, master:tkinter.Misc) -> None:
