@@ -599,14 +599,14 @@ class FullDatas(PartialyFinalClass, PrettyfyClass, Jsonable):
 
 
 class PeriodesStorage(PartialyFinalClass, Generic[_T_TimeID], PrettyfyClass):
-    __slots__ = ("__timeID", "__periodes", "__activitiesUsageCount", "__frozen")
-    __finals__ = {"__timeID", "__periodes", "__activitiesUsageCount"}
+    __slots__ = ("timeframe", "__periodes", "__activitiesUsageCount", "__frozen")
+    __finals__ = {"timeframe", "__periodes", "__activitiesUsageCount"}
     __prettyAttrs__ = list(__slots__)
     
     def __init__(self, timeID:"_T_TimeID", periodes:"Iterable[Periode]|None", 
                  histActions:"HistoryPeriodesActions|None") -> None:
         self.__frozen: bool = False
-        self.__timeID: "_T_TimeID" = timeID
+        self.timeframe: "_T_TimeID" = timeID
         self.__periodes: "SkipList[Periode, datetime]" = \
             SkipList([], lambda periode: periode.startTime)
         self.__activitiesUsageCount: "dict[Activity, int]" = DefaultDict(lambda: 0)
@@ -623,8 +623,8 @@ class PeriodesStorage(PartialyFinalClass, Generic[_T_TimeID], PrettyfyClass):
         it must be contained fully in self.__timeID (if setted)\n
         no needs to revert the hist if an error is raised, there will be no modifications done"""
         if self.__frozen is True: raise ValueError("can't add a periode on a frozen periodes storage")
-        if (self.__timeID is not None) and (self.__timeID.fullyContain(periode) is False):
-            raise ValueError(f"this storage with a setted timeID of {self.__timeID} can't fully contain the periode trying to added: {repr(periode)}")
+        if (self.timeframe is not None) and (self.timeframe.fullyContain(periode) is False):
+            raise ValueError(f"this storage with a setted timeID of {self.timeframe} can't fully contain the periode trying to added: {repr(periode)}")
         # => the periode can be added to this storage
         # => all periodes of the storage don't intersect each other
         intersectWith: "list[Periode]" = self.__periodes.popSubList(startKey=periode.startTime, endKey=periode.endTime)
@@ -666,8 +666,8 @@ class PeriodesStorage(PartialyFinalClass, Generic[_T_TimeID], PrettyfyClass):
         it must be contained fully in self.__timeID (if setted)\n
         no needs to revert the hist if an error is raised, there will be no modifications done"""
         if self.__frozen is True: raise ValueError("can't substract a periode from a frozen periodes storage")
-        if (self.__timeID is not None) and (self.__timeID.fullyContain(periode) is False):
-            raise ValueError(f"this storage with a setted timeID of {self.__timeID} can't fully contain the periode trying to substracted: {repr(periode)}")
+        if (self.timeframe is not None) and (self.timeframe.fullyContain(periode) is False):
+            raise ValueError(f"this storage with a setted timeID of {self.timeframe} can't fully contain the periode trying to substracted: {repr(periode)}")
         intersectWith: "list[Periode]" = self.__periodes.popSubList(startKey=periode.startTime, endKey=periode.endTime)
         """all the periodes that intersect with `periode`"""
         # it can also intersect with the periode that start before `periode`
@@ -923,13 +923,15 @@ class Periode(FinalClass, PrettyfyClass, Jsonable):
             endTime=min(self.endTime, __other.endTime),
             activity=self.activity.combineWith(__other.activity),
             comments=self.__mergeComments(__other, commentsMerge))
-        
+    
     def splitPer_TimeFrame(self, timeFrame:"_TimeFrame")->"dict[_TimeID, Periode]":
         splits: "dict[_TimeID, Periode]" = {}
         # ge the _timeID that contain the start of the periode
         timeID: _TimeID = _TimeID.getTimeID(self.startTime, timeFrame)
         while self.intersect(timeID):
-            splits[timeID] = self.intersection(timeID, commentsMerge="self")
+            intersection = self.intersection(timeID, commentsMerge="self")
+            if intersection.duration != timedelta(0):
+                splits[timeID] = intersection
             timeID = timeID.next()
         return splits
 
@@ -970,13 +972,12 @@ class Periode(FinalClass, PrettyfyClass, Jsonable):
 
 class _TimeID(Periode, addPrettyAttrs_fromBases=False):
     __prettyAttrs__ = (["startTime", "endTime"], False)
-    __smallestDuration: timedelta = timedelta(hours=1) # it makes no senes to use smaller frames
     __epsilon: timedelta = timedelta(microseconds=1)
     
     def __init__(self, startTime:datetime, endTime:datetime) -> None:
         super().__init__(startTime=startTime, endTime=endTime, activity=None, comments=None)
-        if self.duration < _TimeID.__smallestDuration:
-            raise ValueError(f"the {repr(self)} is too short, must be longer than: {_TimeID.__smallestDuration}")
+        if self.duration < self.__epsilon:
+            raise ValueError(f"the {repr(self)} is too short, must be longer than: {_TimeID.__epsilon}")
         
     @property
     def lastTime(self)->datetime:
