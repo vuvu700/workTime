@@ -1677,8 +1677,7 @@ class FontsManger():
         newFont.configure(size=int(newSize*font.cget("size")))
         return newFont
 
-
-if __name__ == "__main__":
+def main(progFile:str)->None:
     logger: Logger = Logger(
         LOGGS_FILE_PATH, fileOpenMode="w",
         newLogLineAfter=timedelta(milliseconds=50))
@@ -1692,10 +1691,14 @@ if __name__ == "__main__":
     class Args(TypedDict):
         openDatasPath: "str|None"
     
-    argumentParser = argparse.ArgumentParser(__file__)
+    argumentParser = argparse.ArgumentParser(prog=progFile)
     argumentParser.add_argument("--open", action="store", dest="openDatasPath", default=None,
                                 required=False, help="the file to open when starting the app")
     args = Args(**argumentParser.parse_args().__dict__)
     
     app = App(args)
     app.run()
+
+
+if __name__ == "__main__":
+    main(__file__)
