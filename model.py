@@ -270,24 +270,33 @@ class FullDatas(PartialyFinalClass, PrettyfyClass, Jsonable):
     
     def goToPrev_TimeFrame(self)->"set[_UpdatedTarget]":
         """move the selected time to the previous timeFrame"""
+        oldSelectedTime: datetime = self.__selectedTime
         prevTime_ID = self.get_TimeID(None, None).prev()
         self.__selectedTime = prevTime_ID.lastTime
+        self.__history.addAction(HistorySelectedTime(
+            oldTime=oldSelectedTime, newTime=self.__selectedTime))
         return {"selectedTime"}
     
     def goToNext_TimeFrame(self)->"set[_UpdatedTarget]":
         """move the selected time to the next timeFrame"""
+        oldSelectedTime: datetime = self.__selectedTime
         nextTime_ID = self.get_TimeID(None, None).next()
         self.__selectedTime = nextTime_ID.startTime
+        self.__history.addAction(HistorySelectedTime(
+            oldTime=oldSelectedTime, newTime=self.__selectedTime))
         return {"selectedTime"}
 
     def goToNow(self)->"set[_UpdatedTarget]":
         """move the selected timeFrame to now\n
         return whether it has changed the selected timeID"""
+        oldSelectedTime: datetime = self.__selectedTime
         oldTimeID: "_TimeID" = self.get_TimeID(None, None)
         self.__selectedTime = datetime.now()
         if self.__selectedTime in oldTimeID:
-            # => alredy in the same 
+            # => didin't changed the periodes interval
             return set()
+        self.__history.addAction(HistorySelectedTime(
+            oldTime=oldSelectedTime, newTime=self.__selectedTime))
         return {"selectedTime"}
     
     def selectTimeFrame(self, timeframe:"_TimeFrame")->"set[_UpdatedTarget]":
@@ -1671,6 +1680,35 @@ class HistorySelectedTimeFrame(HistoryAction):
     @override
     def isEmpty(self)->bool:
         if self.__oldSelection != self.__newSelection:
+            # => self not empty
+            return False
+        # => self is empty
+        return super().isEmpty()
+
+
+
+class HistorySelectedTime(HistoryAction):
+    __slots__ = ("__oldTime", "__newTime", )
+    def __init__(self, oldTime:"datetime", newTime:"datetime") -> None:
+        super().__init__()
+        self.__oldTime: "datetime" = oldTime
+        self.__newTime: "datetime" = newTime
+    
+    def revert(self, datas:FullDatas)->"set[_UpdatedTarget]": 
+        updates: "set[_UpdatedTarget]" = super().revert(datas)
+        datas._trusted_setSelectedTime(self.__oldTime)
+        updates.add("selectedTime")
+        return updates
+    
+    def applie(self, datas:FullDatas)->"set[_UpdatedTarget]": 
+        updates: "set[_UpdatedTarget]" = super().applie(datas)
+        datas._trusted_setSelectedTime(self.__newTime)
+        updates.add("selectedTime")
+        return updates
+
+    @override
+    def isEmpty(self)->bool:
+        if self.__oldTime != self.__newTime:
             # => self not empty
             return False
         # => self is empty

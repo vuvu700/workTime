@@ -33,7 +33,6 @@ from projectPaths import (
 )
 
 from holo.protocols import SupportsContext, Protocol, SupportsRichComparison
-from holo.prettyFormats import prettyPrint, getCurrentFuncCode
 from holo.__typing import (
     get_args, assertIsinstance, override,
     Callable, TracebackType, Literal, Iterable, TypedDict,

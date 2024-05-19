@@ -3,6 +3,7 @@
 **/*.pyc
 .vscode
 datas
+schedules
 
 # specific exclusions
 assets/fullSizeIcon.png
