@@ -183,7 +183,7 @@ class FullDatas(PartialyFinalClass, PrettyfyClass, Jsonable):
         if selectedInterval is None:
             selectedInterval = _TimeID(datetime.min, datetime.max)
         # get all the periodes to export
-        for periode in self.__allPeriodes.getSubsetView(selectedInterval):
+        for periode in self.__allPeriodes.getSubset(selectedInterval):
             if periode.activity in selectedActivities:
                 periodesToExport.append(periode)
         # create the config for the exported datas
@@ -268,36 +268,46 @@ class FullDatas(PartialyFinalClass, PrettyfyClass, Jsonable):
     
     ### selected time
     
-    def goToPrev_TimeFrame(self)->"set[_UpdatedTarget]":
-        """move the selected time to the previous timeFrame"""
-        oldSelectedTime: datetime = self.__selectedTime
-        prevTime_ID = self.get_TimeID(None, None).prev()
-        self.__selectedTime = prevTime_ID.lastTime
-        self.__history.addAction(HistorySelectedTime(
-            oldTime=oldSelectedTime, newTime=self.__selectedTime))
-        return {"selectedTime"}
-    
-    def goToNext_TimeFrame(self)->"set[_UpdatedTarget]":
-        """move the selected time to the next timeFrame"""
-        oldSelectedTime: datetime = self.__selectedTime
-        nextTime_ID = self.get_TimeID(None, None).next()
-        self.__selectedTime = nextTime_ID.startTime
-        self.__history.addAction(HistorySelectedTime(
-            oldTime=oldSelectedTime, newTime=self.__selectedTime))
-        return {"selectedTime"}
-
-    def goToNow(self)->"set[_UpdatedTarget]":
-        """move the selected timeFrame to now\n
-        return whether it has changed the selected timeID"""
+    def __gotoInternal(self, gotoTime:datetime)->"set[_UpdatedTarget]":
         oldSelectedTime: datetime = self.__selectedTime
         oldTimeID: "_TimeID" = self.get_TimeID(None, None)
-        self.__selectedTime = datetime.now()
+        self.__selectedTime = gotoTime
         if self.__selectedTime in oldTimeID:
             # => didin't changed the periodes interval
             return set()
         self.__history.addAction(HistorySelectedTime(
             oldTime=oldSelectedTime, newTime=self.__selectedTime))
         return {"selectedTime"}
+    
+    def goToPrev_TimeFrame(self)->"set[_UpdatedTarget]":
+        """move the selected time to the previous interval"""
+        return self.__gotoInternal(
+            self.get_TimeID(None, None).prev().lastTime)
+    
+    def goToNext_TimeFrame(self)->"set[_UpdatedTarget]":
+        """move the selected time to the next interval"""
+        return self.__gotoInternal(
+            self.get_TimeID(None, None).next().lastTime)
+    
+    def goToLast_TimeFrame(self)->"set[_UpdatedTarget]":
+        """move the selected time to the last interval containing some periodes"""
+        allPeriodesInterval: "_TimeID|None" = self.getAllPeriodesInterval()
+        if allPeriodesInterval is None: # => self has no periode
+            return set() # => don't move =>did nothing
+        return self.__gotoInternal(allPeriodesInterval.lastTime)
+    
+    def goToFirst_TimeFrame(self)->"set[_UpdatedTarget]":
+        """move the selected time to the first interval containing some periodes"""
+        allPeriodesInterval: "_TimeID|None" = self.getAllPeriodesInterval()
+        if allPeriodesInterval is None: # => self has no periode
+            return set() # => don't move =>did nothing
+        return self.__gotoInternal(allPeriodesInterval.startTime)
+        
+
+    def goToNow(self)->"set[_UpdatedTarget]":
+        """move the selected timeFrame to now\n
+        return whether it has changed the selected timeID"""
+        return self.__gotoInternal(datetime.now())
     
     def selectTimeFrame(self, timeframe:"_TimeFrame")->"set[_UpdatedTarget]":
         if self.__selectedTimeFrame == timeframe:
@@ -704,20 +714,27 @@ class PeriodesStorage(PartialyFinalClass, Generic[_T_TimeID], PrettyfyClass):
         return None
         
         
-    def getSubset(self, timeID:"_TimeID")->"PeriodesStorage[_TimeID]": 
-        subPeriodes = self.__periodes.getSubListView(startKey=timeID.startTime, endKey=timeID.endTime)
-        if subPeriodes is None:
-            # => has no periodes
-            return PeriodesStorage(timeID=timeID, periodes=None, histActions=None).freez()
-        return PeriodesStorage(
-            timeID=timeID, histActions=None, periodes=(
-                periode.intersection(timeID, commentsMerge="self") for periode in subPeriodes)).freez()
-    
-    def getSubsetView(self, timeID:"_TimeID")->"Iterable[Periode]":
-        subListView = self.__periodes.getSubListView(startKey=timeID.startTime, endKey=timeID.endTime)
-        if subListView is None:
-            return ()
-        return subListView
+    def getSubset(self, timeID:"_TimeID")->"PeriodesStorage[_TimeID]":
+        """get a frozen subset of all the periodes inside the given `timeID`"""
+        subPeriodes: "Iterable[Periode]|None" = \
+            self.__periodes.getSubListView(startKey=timeID.startTime, endKey=timeID.endTime)
+        # transfert 
+        if subPeriodes is None: 
+            subPeriodes = []
+        # => subPeriodes is now an iterable only
+        subStorage: "PeriodesStorage[_TimeID]" = \
+            PeriodesStorage(timeID=timeID, histActions=None,
+                            periodes=(periode.intersection(timeID, commentsMerge="self")
+                                      for periode in subPeriodes))
+        # add the periode before (to add its intersection)
+        try: periodeBefore: "Periode" = self.__periodes.getBefore(timeID.startTime)
+        except KeyError: pass # => there is no periode before the start key
+        else: # add the periode if it is inside the given timeID
+            if periodeBefore.endTime >= timeID.startTime:
+                subStorage.addPeriode(
+                    periodeBefore.intersection(timeID, commentsMerge="self"), histPeriodes=None)
+        # freez the subset to make it safer to use
+        return subStorage.freez()
     
     def getPeriodes_sortedByfield(self, field:"_PeriodeFields_sortable", ascendingOrder:bool=True)->"list[Periode]":
         return sorted(
@@ -1007,7 +1024,7 @@ class _TimeID(Periode, addPrettyAttrs_fromBases=False):
         return self.endTime - _TimeID.__epsilon
 
     def __contains__(self, t:datetime)->bool:
-        return (self.startTime >= t) and (t < self.endTime)
+        return (self.startTime <= t) and (t < self.endTime)
 
     def next(self)->"_TimeID":
         return _TimeID(startTime=self.endTime, endTime=self.endTime+self.duration)

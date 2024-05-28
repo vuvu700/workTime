@@ -904,6 +904,11 @@ class ActionsFrame(tkinter.Frame):
                 padx=padX, pady=padY, command=self.unClockIn, font=btnFont), 
         ])
         
+        self.mainFrame.bind("<Prior>", self.selectPrev) # Page down
+        self.mainFrame.bind("<Next>", self.selectNext) # Page Up
+        self.mainFrame.bind("<End>", self.selectEnd)
+        self.mainFrame.bind("<Home>", self.selectStart)
+        
         # place the buttons
         self.buttonsLine1.placeButtons(packing="grid")
         self.buttonsLine2.placeButtons(packing="grid")
@@ -917,6 +922,12 @@ class ActionsFrame(tkinter.Frame):
     
     def selectNext(self, Event:"tkinter.Event|None"=None)->None:
         self.application.updatedDatas(self.application.datas.goToNext_TimeFrame())
+        
+    def selectEnd(self, Event:"tkinter.Event|None"=None)->None:
+        self.application.updatedDatas(self.application.datas.goToLast_TimeFrame())
+    
+    def selectStart(self, Event:"tkinter.Event|None"=None)->None:
+        self.application.updatedDatas(self.application.datas.goToFirst_TimeFrame())
 
     def selectNow(self, Event:"tkinter.Event|None"=None)->None:
         self.application.updatedDatas(self.application.datas.goToNow())
