@@ -196,8 +196,7 @@ class FullDatas(PartialyFinalClass, PrettyfyClass, Jsonable):
                 description="(the description was generated at export)" \
                     f"exported the periodes {selectedInterval.prettyTimeFrameText()} "\
                     f"with pe activities: {selectedActivities} (use the same time target and accum)", 
-                targetPerPeriode=self.__configuration.getTimeTarget(), 
-                accumDeltaToTarget=self.__configuration.accumulateDeltaToTarget)
+                targetPerPeriode=self.__configuration.getTimeTarget())
         else: raise ValueError(f"invalide `useConfig` value: {repr(useConfig)}")
         # create the new datas with the extracted periodes
         return FullDatas(
@@ -426,6 +425,25 @@ class FullDatas(PartialyFinalClass, PrettyfyClass, Jsonable):
         totalTimeDuringTarget: timedelta = self.cumulatedDuration(
             self.get_TimeID(selectedTime=None, selectedTimeFrame=timeTarget.timeFrame))
         return timeTarget.targetedTime - totalTimeDuringTarget
+    
+    def getAccumulatedDeltaToTargtedTime(self)->timedelta:
+        """return the accumulated time to the target for the intervals before the current\n
+        negative values => target has been reached"""
+        allPeriodesInterval: "_TimeID|None" = self.getAllPeriodesInterval()
+        if allPeriodesInterval is None:
+            # no periodes => nothing to accumulate
+            return timedelta(0) 
+        timeTarget: "TimeTarget" = self.getTimeTarget()
+        targetCurrentTimeID: "_TimeID" = self.get_TimeID(
+            selectedTime=None, selectedTimeFrame=timeTarget.timeFrame)
+        # get all the periodes betwin before the start of the current 
+        peridoesBefore: "PeriodesStorage[_TimeID]" = \
+            self.__allPeriodes.getSubset(_TimeID(datetime.min, targetCurrentTimeID.startTime))
+        nbTargetIntervals: int = len(peridoesBefore.splitPer_TimeFrame(timeTarget.timeFrame))
+        if nbTargetIntervals == 0:
+            # => no periodes in that interval
+            return timedelta(0)
+        return peridoesBefore.cumulatedDuration() - timeTarget.targetedTime * nbTargetIntervals
     
     def cumulatedDurationPerActivity(
             self, selectedTimeFrame:"_TimeFrame|None|Literal['all']")->"dict[Activity, timedelta]":
@@ -1271,25 +1289,20 @@ class TimeTarget(PrettyfyClass, Jsonable):
 
 
 class Configuration(PrettyfyClass):
-    __slots__ = ("name", "description", "targetedTime", 
-                 "targetedTimeFrame", "accumulateDeltaToTarget", )
+    __slots__ = ("name", "description", "targetedTime", "targetedTimeFrame", )
     assert set(__slots__) == set(get_args(_ConfigField))
     
-    def __init__(self, name:str, description:str, accumDeltaToTarget:bool,
-                 targetPerPeriode:"TimeTarget") -> None:
+    def __init__(self, name:str, description:str, targetPerPeriode:"TimeTarget") -> None:
         self.name: str = name
         self.description: str = description
         self.targetedTime: "PrettyTimedelta" = targetPerPeriode.targetedTime
         self.targetedTimeFrame: "_TimeFrame" = targetPerPeriode.timeFrame
-        self.accumulateDeltaToTarget: bool = accumDeltaToTarget
 
     @classmethod
     def createEmpty(cls)->"Configuration":
         return Configuration(
             name="no name", description="no description provided", 
-            targetPerPeriode=TimeTarget(timedelta(0), "week"),
-            accumDeltaToTarget=False,
-        )
+            targetPerPeriode=TimeTarget(timedelta(0), "week"))
 
     @classmethod
     def fromText(cls, datas:"dict[_ConfigField, str]")->"Self":
@@ -1324,8 +1337,6 @@ class Configuration(PrettyfyClass):
             return self.targetedTime.__str__()
         elif field == "targetedTimeFrame":
             return timeFrameToText(self.targetedTimeFrame)
-        elif field == "accumulateDeltaToTarget":
-            return str(self.accumulateDeltaToTarget)
         else: raise AttributeError(f"invalide field: {field}")
         
     def edit(self, datas:"dict[_ConfigField, str]", histEdit:"HistoryEditConfig|None")->None:
@@ -1339,15 +1350,13 @@ class Configuration(PrettyfyClass):
     def copy(self)->"Configuration":
         return Configuration(
             name=self.name, description=self.description,
-            accumDeltaToTarget=self.accumulateDeltaToTarget, 
             targetPerPeriode=self.getTimeTarget())
             
     def toJson(self)->"AsJson_Configuration":
         return AsJson_Configuration(
             cls=self.__class__.__name__,
             name=self.name, description=self.description,
-            targetedTimePerPeriode=self.getTimeTarget().toJson(),
-            accumulateDeltaToTarget=self.accumulateDeltaToTarget)
+            targetedTimePerPeriode=self.getTimeTarget().toJson())
 
     @classmethod
     def fromJson(cls, datas:"AsJson_Configuration")->"Self":
@@ -1357,8 +1366,7 @@ class Configuration(PrettyfyClass):
             self=config,
             name=datas["name"],
             description=datas["description"],
-            targetPerPeriode=TimeTarget.fromJson(datas["targetedTimePerPeriode"]),
-            accumDeltaToTarget=datas["accumulateDeltaToTarget"])
+            targetPerPeriode=TimeTarget.fromJson(datas["targetedTimePerPeriode"]))
         return config
     
 

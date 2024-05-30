@@ -40,7 +40,7 @@ PARSE_TIME_PATTERN = re.compile(
 _PeriodeColumn = Literal["start date", "end date", "duration", "activity"]
 _PeriodeField = Literal["startTime", "endTime", "duration", "activity", "comments"]
 _PeriodeFields_sortable = Literal["startTime", "endTime", "duration", "activity"]
-_ConfigField = Literal["name", "description", "targetedTime", "targetedTimeFrame", "accumulateDeltaToTarget"]
+_ConfigField = Literal["name", "description", "targetedTime", "targetedTimeFrame"]
 _PeriodeColumn_TO_PeriodeField: "dict[_PeriodeColumn, _PeriodeFields_sortable]" = {
     "start date": "startTime", "end date": "endTime", 
     "duration": "duration", "activity": "activity",

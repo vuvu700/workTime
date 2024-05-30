@@ -531,6 +531,8 @@ class StatsFrame(tkinter.Frame):
             StatLine(self, "time target: ", self.getText_targtedTime, updateConditions={"config"}),
             StatLine(self, "remaining time to target: ", self.getText_remainigTimeToDo,
                      updateConditions={"periodes", "clockin", "selectedTime", "config"}, autoUpdateDelay=15.0),
+            StatLine(self, "accumulated delta time to target:\n(of past intervals)", self.getText_accumulatedDeltaToTarget,
+                     updateConditions={"periodes", "selectedTime", "config"}, autoUpdateDelay=15.0),
         ]
         # place each stat line
         self.grid_columnconfigure(0, weight=1)
@@ -576,6 +578,14 @@ class StatsFrame(tkinter.Frame):
             return f"finished and {prettyTimedelta(-deltaToTarget)} over the target"
         # => still some time to do
         return f"{prettyTimedelta(deltaToTarget)} under the target"
+
+    def getText_accumulatedDeltaToTarget(self)->str:
+        accumulatedDelta: timedelta = self.application.datas.getAccumulatedDeltaToTargtedTime()
+        if accumulatedDelta <= timedelta(0):
+            # => all targetd time done
+            return f"{prettyTimedelta(-accumulatedDelta)} over the target"
+        # => still some time to do
+        return f"{prettyTimedelta(accumulatedDelta)} under the target"
 
     def getText_clockedInAt(self)->str:
         clockinTime: "datetime|None" = self.application.datas.getClockinTime()
@@ -917,42 +927,42 @@ class ActionsFrame(tkinter.Frame):
         self.buttonsLine2.pack(side=tkinter.TOP)
         self.buttonsLine3.pack(side=tkinter.TOP)
 
-    def selectPrev(self, Event:"tkinter.Event|None"=None)->None:
+    def selectPrev(self, event:"tkinter.Event|None"=None)->None:
         self.application.updatedDatas(self.application.datas.goToPrev_TimeFrame())
     
-    def selectNext(self, Event:"tkinter.Event|None"=None)->None:
+    def selectNext(self, event:"tkinter.Event|None"=None)->None:
         self.application.updatedDatas(self.application.datas.goToNext_TimeFrame())
         
-    def selectEnd(self, Event:"tkinter.Event|None"=None)->None:
+    def selectEnd(self, event:"tkinter.Event|None"=None)->None:
         self.application.updatedDatas(self.application.datas.goToLast_TimeFrame())
     
-    def selectStart(self, Event:"tkinter.Event|None"=None)->None:
+    def selectStart(self, event:"tkinter.Event|None"=None)->None:
         self.application.updatedDatas(self.application.datas.goToFirst_TimeFrame())
 
-    def selectNow(self, Event:"tkinter.Event|None"=None)->None:
+    def selectNow(self, event:"tkinter.Event|None"=None)->None:
         self.application.updatedDatas(self.application.datas.goToNow())
 
     def __createEmptyPeriode(self)->Periode:
         now = datetime.now()
         return Periode(startTime=now, endTime=now, activity=None, comments=None)
 
-    def addPeriode(self, Event:"tkinter.Event|None"=None)->None:
+    def addPeriode(self, event:"tkinter.Event|None"=None)->None:
         # start a dialog to add a periode
         periode: Periode = self.__createEmptyPeriode()
         self.application.tkinterRoot.addPeriodeDialog(AddPeriodeDialog(self, self.application, periode))
     
-    def removePeriode(self, Event:"tkinter.Event|None"=None)->None:
+    def removePeriode(self, event:"tkinter.Event|None"=None)->None:
         # start a dialog to remove a periode
         periode: Periode = self.__createEmptyPeriode()
         self.application.tkinterRoot.addPeriodeDialog(RemovePeriodeDialog(self, self.application, periode))
 
-    def clockIn(self, Event:"tkinter.Event|None"=None):
+    def clockIn(self, event:"tkinter.Event|None"=None):
         # clock in and update the app
         with ErrorHandlerWithMessage("failed to clock in", self):
             self.application.datas.clockin()
         self.application.updatedDatas({"clockin"})
         
-    def clockOut(self, Event:"tkinter.Event|None"=None):
+    def clockOut(self, event:"tkinter.Event|None"=None):
         # ge the clocked periode
         with ErrorHandlerWithMessage("failed to clock out", self):
             clockedPeriode: Periode = self.application.datas.clockout()
@@ -960,7 +970,7 @@ class ActionsFrame(tkinter.Frame):
         self.application.updatedDatas({"clockin"})
         self.application.tkinterRoot.addPeriodeDialog(AddPeriodeDialog(self, self.application, clockedPeriode))
         
-    def unClockIn(self, Event:"tkinter.Event|None"=None):
+    def unClockIn(self, event:"tkinter.Event|None"=None):
         with ErrorHandlerWithMessage("failed to un-clock in", self):
             self.application.datas.unClockin()
         self.application.updatedDatas({"clockin"})
@@ -998,7 +1008,6 @@ class EditConfigDialog(CustomTopLevel):
             TextEntryLine_config(self, self.application, "description the configuration: ", fieldName="description"),
             TextEntryLine_config(self, self.application, "targeted time to do per periode: ", fieldName="targetedTime"),
             TimeFrameSelectorLine_configField(self, self.application, "time frame to do the targeted time: "),
-            TextEntryLine_config(self, self.application, "does the delta to the target is transmited to next periode: ", fieldName="accumulateDeltaToTarget"),
         ]
         self.validateButton = tkinter.Button(self, text="validate", bg="maroon1", command=self.saveConfig)
         

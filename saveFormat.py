@@ -37,7 +37,6 @@ class AsJson_Configuration(TypedDict):
     name: str
     description: str
     targetedTimePerPeriode: "AsJson_TimeTarget"
-    accumulateDeltaToTarget: bool
 
 class AsJson_Periode(TypedDict):
     cls: str
