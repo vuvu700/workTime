@@ -140,8 +140,7 @@ class FullDatas(PartialyFinalClass, PrettyfyClass, Jsonable):
             configuration=self.__configuration.toJson(),
             selectedTime=datetimeToJson(self.__selectedTime),
             selectedTimeFrame=timeFrameToJson(self.__selectedTimeFrame),
-            clockinTime=clockinTime,
-        )
+            clockinTime=clockinTime)
     
     @classmethod
     def fromJson(cls, datas:"AsJson_FullDatas", *, _fromFile:"Path|None")->"Self":
@@ -157,8 +156,7 @@ class FullDatas(PartialyFinalClass, PrettyfyClass, Jsonable):
                          else datetimeFromJson(datas["clockinTime"])),
             selectedTime=datetimeFromJson(datas["selectedTime"]),
             selectedTimeFrame=timeFrameFromJson(datas["selectedTimeFrame"]),
-            fromSaveFile=_fromFile,
-        )
+            fromSaveFile=_fromFile)
         return fullDatas
     
     @classmethod
@@ -170,8 +168,7 @@ class FullDatas(PartialyFinalClass, PrettyfyClass, Jsonable):
         prettyPrintToJSON(
             self.toJson(), stream=file, end=None,
             indentSequence=" "*2, 
-            compact=(compact or JSON_SEMI_COMPACT_ARGS),
-        )
+            compact=(compact or JSON_SEMI_COMPACT_ARGS))
         self.__saveFilePath = getRealPath(file)
         self.__lastSave_histNodeID = self.__history.getCurrentNodeID()
     
@@ -443,7 +440,7 @@ class FullDatas(PartialyFinalClass, PrettyfyClass, Jsonable):
         if nbTargetIntervals == 0:
             # => no periodes in that interval
             return timedelta(0)
-        return peridoesBefore.cumulatedDuration() - timeTarget.targetedTime * nbTargetIntervals
+        return timeTarget.targetedTime * nbTargetIntervals - peridoesBefore.cumulatedDuration()
     
     def cumulatedDurationPerActivity(
             self, selectedTimeFrame:"_TimeFrame|None|Literal['all']")->"dict[Activity, timedelta]":
