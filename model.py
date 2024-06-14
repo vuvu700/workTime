@@ -38,6 +38,8 @@ from saveFormat import (
 ### all datetime are in local time
 locale.setlocale(locale.LC_TIME, "fr_FR")
 
+EPSILON_DURATION: timedelta = timedelta.resolution
+
 
 def timeFrameFromText(text:str)->"_TimeFrame":
     """either a `_TimeFrame_literals` is given\n
@@ -833,6 +835,11 @@ class Periode(FinalClass, PrettyfyClass, Jsonable):
                  activity:"str|Activity|None", comments:"str|None") -> None:
         self.startTime: datetime = startTime
         self.endTime: datetime = endTime
+        # ensure the periode isn't empty
+        if self.duration < EPSILON_DURATION:
+            raise ValueError(f"the duration betwin: {self.startTime} and {self.endTime} is too short, "
+                             f"must be longer than: {EPSILON_DURATION} but is {self.duration}")
+        # set the activity and comments
         if not isinstance(activity, Activity):
             activity = Activity(activity)
         self.activity: "Activity" = activity
@@ -961,10 +968,14 @@ class Periode(FinalClass, PrettyfyClass, Jsonable):
         if self.duration < spacing:
             raise ValueError(f"can't split a periode: {repr(self)} with a duration of: {self.duration} using a spacing of: {spacing}")
         # => can split it
-        firstPeriode: Periode = self.copyContent(self.startTime, t)
-        secondPeriode: Periode = self.copyContent(t, self.endTime)
-        firstPeriode.endTime -= spacing * (firstPeriode.duration / self.duration)
-        secondPeriode.startTime += spacing * (secondPeriode.duration / self.duration)
+        firstPeriodeProportion: float = (t - self.startTime) / self.duration
+        """proportion of the first part relative to the total duration"""
+        firstPeriode: Periode = self.copyContent(
+            newStartTime=self.startTime, 
+            newEndTime=(t - spacing * firstPeriodeProportion))
+        secondPeriode: Periode = self.copyContent(
+            newStartTime=(t + spacing * (1 - firstPeriodeProportion)),
+            newEndTime=self.endTime)
         return (firstPeriode, secondPeriode)
 
 
@@ -1026,17 +1037,14 @@ class Periode(FinalClass, PrettyfyClass, Jsonable):
 
 class _TimeID(Periode, addPrettyAttrs_fromBases=False):
     __prettyAttrs__ = (["startTime", "endTime"], False)
-    __epsilon: timedelta = timedelta(microseconds=1)
     
     def __init__(self, startTime:datetime, endTime:datetime) -> None:
         super().__init__(startTime=startTime, endTime=endTime, activity=None, comments=None)
-        if self.duration < self.__epsilon:
-            raise ValueError(f"the {repr(self)} is too short, must be longer than: {_TimeID.__epsilon}")
         
     @property
     def lastTime(self)->datetime:
         """the last moment before self.endTime"""
-        return self.endTime - _TimeID.__epsilon
+        return self.endTime - EPSILON_DURATION
 
     def __contains__(self, t:datetime)->bool:
         return (self.startTime <= t) and (t < self.endTime)

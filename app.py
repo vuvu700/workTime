@@ -944,7 +944,7 @@ class ActionsFrame(tkinter.Frame):
 
     def __createEmptyPeriode(self)->Periode:
         now = datetime.now()
-        return Periode(startTime=now, endTime=now, activity=None, comments=None)
+        return Periode(startTime=now, endTime=now+timedelta(seconds=1), activity=None, comments=None)
 
     def addPeriode(self, event:"tkinter.Event|None"=None)->None:
         # start a dialog to add a periode
