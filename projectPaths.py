@@ -1,5 +1,7 @@
 from pathlib import Path
 
+FILE_ENCODING = "utf-8"
+
 DIRECTORY = Path(__file__).parent
 
 LOGGS_FILE_PATH = DIRECTORY.joinpath("currentSessionLogs.log")

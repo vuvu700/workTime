@@ -12,6 +12,10 @@ from model import (
     prettyDatetime,
 )
 
+
+HOUR_FORMAT: str = "%Hh%M"
+
+
 class GridPos(NamedTuple):
     row: int
     col: int
@@ -247,9 +251,9 @@ def drawSchedule(periodes:"PeriodesStorage[_TimeID]")->"drawsvg.Drawing":
                 subPeriodeTexts.append(str(subPeriode.activity))
             if (subPeriode.duration > timedelta(minutes=40)) or (len(subPeriodeTexts) == 0):
                 subPeriodeTexts.append("\n")
-                subPeriodeTexts.append(prettyDatetime(subPeriode.startTime, 'time'))
+                subPeriodeTexts.append(subPeriode.startTime.strftime(HOUR_FORMAT))
                 subPeriodeTexts.append(" -> ")
-                subPeriodeTexts.append(prettyDatetime(subPeriode.endTime, 'time'))
+                subPeriodeTexts.append(subPeriode.endTime.strftime(HOUR_FORMAT))
             # else: => if it show the activity there is not enought place for the interval ()
             
             # draw the text of the sub periode

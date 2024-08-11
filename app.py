@@ -21,7 +21,7 @@ from model import (
     _ConfigField, _PeriodeField, _UpdatedTarget, _TimeFrame, _TimeFrame_literals, 
     FullDatas, Periode, TimeTarget, _TimeID, PeriodesStorage, Activity, NoHistoryError,
     prettyTimedelta, datetimeToText, datetimeFromText, prettyDatetime, timedeltaFromText,
-    prettyTimeFrame, timeFrameToText, timeFrameFromText,
+    prettyTimeFrame, timeFrameToText, timeFrameFromText, 
 )
 from utils import (
     _PeriodeColumn, _PeriodeColumn_TO_PeriodeField,
@@ -29,8 +29,8 @@ from utils import (
 )
 from generateScheduleView import drawSchedule
 from projectPaths import (
-    DATAS_DIRECTORY, ICON_PATH, LOGGS_FILE_PATH, SCHEDULES_DIRECTORY,
-)
+    DATAS_DIRECTORY, ICON_PATH, LOGGS_FILE_PATH,
+    SCHEDULES_DIRECTORY, FILE_ENCODING, )
 
 from holo.protocols import SupportsContext, Protocol, SupportsRichComparison
 from holo.__typing import (
@@ -173,7 +173,7 @@ class App():
                 backupRawContent: bytes = file.read()
         else: backupRawContent = bytes()
         try:
-            with open(filePath, mode="w") as file:
+            with open(filePath, mode="w", encoding=FILE_ENCODING) as file:
                 datas.saveToFile(file)
         except Exception as err: # rewrite the backup content
             with open(filePath, mode="wb") as file:
@@ -1640,7 +1640,7 @@ class ScheduleDialog(CustomTopLevel):
             svgDrawing.append_title(self.application.datas.getConfigText("name"))
         
         # save to the file
-        with open(saveFilePath, mode="w") as saveFile:
+        with open(saveFilePath, mode="w", encoding=FILE_ENCODING) as saveFile:
             if saveFilePath.suffix == ".html":
                 svgDrawing.as_html(output_file=saveFile)
             else: # => expect an svg (or other)
