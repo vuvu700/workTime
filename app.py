@@ -35,9 +35,13 @@ from projectPaths import (
 from holo.protocols import SupportsContext, Protocol, SupportsRichComparison
 from holo.__typing import (
     get_args, assertIsinstance, override,
-    Callable, TracebackType, Literal, Iterable, TypedDict,
-)
+    Callable, TracebackType, Literal, Iterable, TypedDict, )
 from holo.logger import Logger
+from holo.__typing import Generic, TypeVar, LiteralString
+
+
+_T_TableColumn = TypeVar("_T_TableColumn", bound=LiteralString)
+_T_TableElement = TypeVar("_T_TableElement", Activity, Periode)
 
 # TODO: (IDEA, not to implement right now !!!)
 # change the way edit periode dialogs are manage:
@@ -721,9 +725,7 @@ class PerodesFrame(tkinter.Frame):
         self.selectedTimeIDStatLine.autoUpdate(targets)
         self.periodesTable.updatedDatas(targets)
 
-from holo.__typing import Generic, TypeVar, LiteralString
-_T_TableColumn = TypeVar("_T_TableColumn", bound=LiteralString)
-_T_TableElement = TypeVar("_T_TableElement", Activity, Periode)
+
 
 class GenericSortableTableFrame(tkinter.Frame, ABC, Generic[_T_TableColumn, _T_TableElement]):
     @property
@@ -1631,10 +1633,11 @@ class ScheduleDialog(CustomTopLevel):
         # get the interval, the periodes and generate the schedule
         selectedInterval: "_TimeID" = self.getSelectedTimeInterval()
         periodes = self.application.datas.getPeriodes(selectedInterval.startTime, selectedInterval)
-        svgDrawing = drawSchedule(periodes)
-        # set the lasts parameters
-        svgDrawing.set_pixel_scale(1080)
-        svgDrawing.append_title(self.application.datas.getConfigText("name"))
+        with ErrorHandlerWithMessage("couldn't draw the schedule", self):
+            svgDrawing = drawSchedule(periodes)
+            # set the lasts parameters
+            svgDrawing.set_pixel_scale(1080)
+            svgDrawing.append_title(self.application.datas.getConfigText("name"))
         
         # save to the file
         with open(saveFilePath, mode="w") as saveFile:

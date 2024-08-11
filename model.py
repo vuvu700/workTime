@@ -383,7 +383,7 @@ class FullDatas(PartialyFinalClass, PrettyfyClass, Jsonable):
         if clockedIn_periode is None:
             timeClockedIn_selection = timedelta(0)
         elif clockedIn_periode.intersect(selection) is True:
-            timeClockedIn_selection = clockedIn_periode.intersection(selection, "None").duration
+            timeClockedIn_selection = clockedIn_periode.intersection(selection, "None", requirePeriode=True).duration
         else: timeClockedIn_selection = timedelta(0) # => they don't intersect 
         # compute the total time done during the interval
         selectedTimeFrameTotal: timedelta = \
@@ -740,16 +740,15 @@ class PeriodesStorage(PartialyFinalClass, Generic[_T_TimeID], PrettyfyClass):
             subPeriodes = []
         # => subPeriodes is now an iterable only
         subStorage: "PeriodesStorage[_TimeID]" = \
-            PeriodesStorage(timeID=timeID, histActions=None,
-                            periodes=(periode.intersection(timeID, commentsMerge="self")
-                                      for periode in subPeriodes))
+            PeriodesStorage(
+                timeID=timeID, histActions=None, periodes=(
+                    periode.intersection(timeID, commentsMerge="self", requirePeriode=True) for periode in subPeriodes))
         # add the periode before (to add its intersection)
         try: periodeBefore: "Periode" = self.__periodes.getBefore(timeID.startTime)
         except KeyError: pass # => there is no periode before the start key
         else: # add the periode if it is inside the given timeID
             if periodeBefore.endTime >= timeID.startTime:
-                subStorage.addPeriode(
-                    periodeBefore.intersection(timeID, commentsMerge="self"), histPeriodes=None)
+                subStorage.addPeriode(periodeBefore.intersection(timeID, commentsMerge="self", requirePeriode=True), histPeriodes=None)
         # freez the subset to make it safer to use
         return subStorage.freez()
     
@@ -978,14 +977,29 @@ class Periode(FinalClass, PrettyfyClass, Jsonable):
             newEndTime=self.endTime)
         return (firstPeriode, secondPeriode)
 
-
-    def intersection(self, __other:"Periode", commentsMerge:"_CommentsMerge")->"Periode":
+    @overload
+    def intersection(self, __other:"Periode", commentsMerge:"_CommentsMerge", 
+                     requirePeriode:"Literal[True]")->"Periode": ...
+    @overload
+    def intersection(self, __other:"Periode", commentsMerge:"_CommentsMerge",
+                     requirePeriode:"Literal[False]")->"Periode|None": ...
+    def intersection(self, __other:"Periode", commentsMerge:"_CommentsMerge", requirePeriode:bool)->"Periode|None":
         """return the intersection of the self with __other (they must intersect and have comptible activites)"""
-        if (self.intersect(__other) is False) or (self.combineableActivities(__other) is False):
+        if self.combineableActivities(__other) is False:
+            raise ValueError(f"can't compute the intersection of {repr(self)} and {repr(__other)} they must have compatible activities")
+        if self.intersect(__other) is False:
+            if requirePeriode is False: 
+                return None
+            raise ValueError(f"can't compute the intersection of {repr(self)} and {repr(__other)} they must intersect and have compatible activities")
+        startTime = max(self.startTime, __other.startTime)
+        endTime = min(self.endTime, __other.endTime)
+        if (endTime - startTime) < EPSILON_DURATION:
+            # => empty periode (not possible to create)
+            if requirePeriode is False:
+                return None
             raise ValueError(f"can't compute the intersection of {repr(self)} and {repr(__other)} they must intersect and have compatible activities")
         return Periode(
-            startTime=max(self.startTime, __other.startTime),
-            endTime=min(self.endTime, __other.endTime),
+            startTime=startTime, endTime=endTime,
             activity=self.activity.combineWith(__other.activity),
             comments=self.__mergeComments(__other, commentsMerge))
     
@@ -994,8 +1008,8 @@ class Periode(FinalClass, PrettyfyClass, Jsonable):
         # ge the _timeID that contain the start of the periode
         timeID: _TimeID = _TimeID.getTimeID(self.startTime, timeFrame)
         while self.intersect(timeID):
-            intersection = self.intersection(timeID, commentsMerge="self")
-            if intersection.duration != timedelta(0):
+            intersection: "Periode|None" = self.intersection(timeID, commentsMerge="self", requirePeriode=False)
+            if intersection is not None:
                 splits[timeID] = intersection
             timeID = timeID.next()
         return splits
