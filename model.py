@@ -17,7 +17,8 @@ from holo.prettyFormats import (
     prettyPrint, prettyPrintToJSON, 
     PrettyfyClass, _ObjectRepr,
 )
-from holo.linkedObjects import SkipList, NodeAuto
+from holo.linkedObjects import (
+    SkipList, History as _HistoryBackend, NoHistoryError, )
 
 from utils import (
     TrustError, Jsonable,
@@ -1390,104 +1391,19 @@ class Configuration(PrettyfyClass):
     
 
 #########################################################
-
-class NoHistoryError(Exception):
-    """no history is available"""
-
-class _HistoryNode(NodeAuto["HistoryAction"], PartialyFinalClass):
-    __NB_NODES_CREATED: int = 0
-    __slots__ = ("ID", )
-    __finals__ = {"ID", }
-    val: "HistoryAction"
-    next: "_HistoryNode|None"
-    prev: "_HistoryNode|None"
     
-    def __init__(self, value:"HistoryAction", next:"_HistoryNode|None"=None,
-                 prev:"_HistoryNode|None"=None) -> None:
-        super().__init__(value, next, prev)
-        self.ID = _HistoryNode.__NB_NODES_CREATED
-        _HistoryNode.__NB_NODES_CREATED += 1
-    
-class History():
-    __slots__ = ("__actions", "__NULL_HIST", )
-    
-    def __init__(self) -> None:
-        self.__NULL_HIST: "_HistoryNode" = _HistoryNode(...)
-        self.__actions: "_HistoryNode" = self.__NULL_HIST
-        """all the actions done, prev/current actions are action to revert, 
-        next action are the ones to redo\ncurrent Node is the last action done"""
-    
-    def getEmptyHistID(self)->int:
-        return self.__NULL_HIST.ID
-    
-    def getCurrentNodeID(self)->int:
-        """return the ID of the currently targted node"""
-        return self.__actions.ID
-    
-    def addAction(self, action:"HistoryAction")->None:
-        """add the given action if it isn't empty"""
-        if action.isEmpty() is True:
-            return None # => empty action, don't add
-        
-        if self.__actions is self.__NULL_HIST:
-            # => no current actions
-            self.__actions = _HistoryNode(action, prev=self.__NULL_HIST)
-            return None
-        # drop the redo action
-        self.__actions.next = None 
-        # add the action in front of the old action
-        self.__actions = _HistoryNode(action, prev=self.__actions)
+class History(_HistoryBackend["HistoryAction"]):
         
     def revertOne(self, datas:FullDatas)->"set[_UpdatedTarget]":
         """try to revert the last action on the `datas`, raise a NoHistoryError if there is no history available"""
-        if self.__actions is self.__NULL_HIST:
-            raise NoHistoryError("there is no history to revert")
-        # => revert
-        updates:"set[_UpdatedTarget]" = \
-            self.__actions.value.revert(datas)
-        assert self.__actions.prev is not None
-        self.__actions = self.__actions.prev
-        return updates
+        return super().undoOne().revert(datas)
         
     def redoOne(self, datas:FullDatas)->"set[_UpdatedTarget]":
         """try to redo last action on the `datas`, raise a NoHistoryError if there is no history available"""
-        if self.__actions.next is None:
-            raise NoHistoryError("there is no history to redo")
-        # => redo
-        updates: "set[_UpdatedTarget]" = \
-            self.__actions.next.value.applie(datas)
-        self.__actions = self.__actions.next
-        return updates
+        return super().redoOne().applie(datas)
 
-    def clearHistory(self)->None:
-        self.__init__()
-
-    def __get_allToRedo(self)->"list[HistoryAction]":
-        actions: "list[HistoryAction]" = []
-        hist = self.__actions.next
-        while hist is not None:
-            actions.append(hist.value)
-            hist = hist.next
-        actions.reverse()
-        return actions
-
-    def __get_allToRevert(self)->"list[HistoryAction]":
-        if self.__actions is None:
-            return []
-        actions: "list[HistoryAction]" = []
-        hist = self.__actions
-        while hist is not self.__NULL_HIST:
-            assert hist is not None
-            actions.append(hist.value)
-            hist = hist.prev
-        return actions
-
-    def __pretty__(self, *_, **__)->"_ObjectRepr":
-        return _ObjectRepr(self.__class__.__name__, 
-            args=("timeline: [done after -> done before]", ),
-            kwargs={"toRedo": self.__get_allToRedo(), 
-                    "toRevert": self.__get_allToRevert()},
-        )
+    def addAction(self, action:"HistoryAction")->None:
+        self.addCheckpoint(value=action)
     
 #########################################################
 

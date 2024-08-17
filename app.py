@@ -9,7 +9,6 @@ import ctypes
 import os
 import argparse
 
-# import pdfschedule
 
 import tkinter
 import tkinter.ttk
