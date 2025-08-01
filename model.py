@@ -15,7 +15,7 @@ from holo.__typing import (
 from holo.protocols import _T
 from holo.prettyFormats import (
     prettyPrint, prettyPrintToJSON, 
-    PrettyfyClass, _ObjectRepr,
+    PrettyfyClass, _ObjectRepr, PrettyfyClassConfig, 
 )
 from holo.linkedObjects import (
     SkipList, History as _HistoryBackend, NoHistoryError, )
@@ -81,7 +81,6 @@ class FullDatas(PartialyFinalClass, PrettyfyClass, Jsonable):
                  "__registeredActivities", "__configuration", "__history", "__trustMode", 
                  "__saveFilePath", "__lastSave_histNodeID", )
     __finals__ = {"__allPeriodes", "__registeredActivities", "__history", "__configuration"}
-    __prettyAttrs__ = list(__slots__)
     
     def __init__(self, allPeriodes:"None|Iterable[Periode]", configuration:"Configuration", 
                  selectedTime:"datetime", selectedTimeFrame:"_TimeFrame", 
@@ -640,7 +639,6 @@ class FullDatas(PartialyFinalClass, PrettyfyClass, Jsonable):
 class PeriodesStorage(PartialyFinalClass, Generic[_T_TimeID], PrettyfyClass):
     __slots__ = ("timeframe", "__periodes", "__activitiesUsageCount", "__frozen")
     __finals__ = {"timeframe", "__periodes", "__activitiesUsageCount"}
-    __prettyAttrs__ = list(__slots__)
     
     def __init__(self, timeID:"_T_TimeID", periodes:"Iterable[Periode]|None", 
                  histActions:"HistoryPeriodesActions|None") -> None:
@@ -1051,7 +1049,9 @@ class Periode(FinalClass, PrettyfyClass, Jsonable):
 
 
 class _TimeID(Periode, addPrettyAttrs_fromBases=False):
-    __prettyAttrs__ = (["startTime", "endTime"], False)
+    __prettyAttrs__ = PrettyfyClassConfig(
+        showAttrs=["startTime", "endTime"], hideAttrs=[], showDict=False,
+        addNewSlots=False, mergeWithParent=False)
     
     def __init__(self, startTime:datetime, endTime:datetime) -> None:
         super().__init__(startTime=startTime, endTime=endTime, activity=None, comments=None)

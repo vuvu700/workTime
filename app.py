@@ -409,7 +409,7 @@ class MenusWidget(tkinter.Menu):
         """ask the file to open and load the datas from it"""
         # ask a file to open
         file = tkinter.filedialog.askopenfile(
-            mode="rb", defaultextension=".pickle", initialdir=DATAS_DIRECTORY, 
+            mode="rb", initialdir=DATAS_DIRECTORY,
             parent=self, filetypes=DATAS_FILE_TYPES, title="select the datas file to open")
         if file is None: # => no file selected, don't open anything
             return None
